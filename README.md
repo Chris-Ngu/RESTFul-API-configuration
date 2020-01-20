@@ -2,5 +2,6 @@
 
 # Technologies
 Postman
+
 Flask w/ SQLAlchemy
 
