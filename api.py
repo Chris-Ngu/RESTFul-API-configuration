@@ -1,6 +1,8 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
+import jwt
+import datetime
 import uuid
 import os
 
@@ -25,8 +27,28 @@ class Todo(db.Model):
     complete = db.Column(db.Boolean)
     user_id = db.Column(db.Integer) #this can be foreign key
 
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+
+        if 'x-access-token' in request.headers:
+            token = request.headers['x-access-token']
+        if not token:
+            return jsonify({'message': 'token is missing'}), 401
+
+        try:
+            data = jwt.decode(token, app.config['SECRET_KEY'])
+            current_user = User.query.filter_by(public_id=data['public_id']).first()
+        except:
+            return jsonify({'message': 'token is invalid'}), 401
+
+        return f(current_user, *args, **kwargs)
+    return decorated
+
 @app.route('/user',methods=['GET'])
-def get_all_users():
+@token_requred
+def get_all_users(current_user):
 
     users = User.query.all()
     output = []
@@ -42,7 +64,8 @@ def get_all_users():
     return jsonify({'users': output})
 
 @app.route('/user/<public_id>', methods=['GET'])
-def get_one_user(public_id):
+@token_requred
+def get_one_user(current_user, public_id):
     user = User.query.filter_by(public_id=public_id).first()
     
     if not user:
@@ -56,7 +79,8 @@ def get_one_user(public_id):
     return jsonify({'user': user_data})
 
 @app.route('/user', methods=['POST'])
-def create_user():
+@token_required
+def create_user(current_user):
     data = request.get_json()
 
     hashed_password = generate_password_hash(data['password'], method='sha256')
@@ -67,7 +91,8 @@ def create_user():
     return jsonify({'message': 'New user created'})
 
 @app.route('/user/<public_id>', methods = ['PUT'])
-def promote_user(public_id):
+@token_requred
+def promote_user(current_user, public_id):
 
     user = User.query.filter_by(public_id=public_id).first()
     if not user:
@@ -78,10 +103,35 @@ def promote_user(public_id):
     return jsonify({'message': 'User has been promoted'})
 
 @app.route('/user/<public_id>', methods=['DELETE'])
-def delete_user(public_id):
-    return ''
+@token_requred
+def delete_user(current_user, public_id):
+    user = User.query.filter_by(public_id=public_id).first()
+    if not user:
+        return jsonify({'Message': 'No user found'})
 
+    db.session.delete(user)
+    db.session.commit()
+
+    return jsonify({'message': 'User has been deleted'})
+
+#security token with expiration
+@app.route('/login')
+def login():
+    auth = request.authorization
+
+    if not auth or not auth.username or not auth.password:
+        return make_response('Error verifying', 401, {'WWW-Authenticate': 'Basic realm="Login required"'})
+    user = User.query.filter_by(name = auth.username).first()
+    if not user:
+        return make_response('Error verifying', 401, {'WWW-Authenticate': 'Basic realm="Login required"'})
+
+    if check_password_hash(user.password, auth.password):
+        token = jwt.encode({'public_id' : user.public_id, 'exp' : datetime.datetime.utcnow() + datetime.timedelta(minutes=30)}, app.config['SECRET_KEY'])
+        return jsonify({'token' : token.decode('UTF-8')})
+
+    return make_response('Error verifying', 401, {'WWW-Authenticate': 'Basic realm="Login required"'})
+
+    
+    
 if __name__ == '__main__':
     app.run(debug=True)
-
-    #need to check and dowload sqlite3
