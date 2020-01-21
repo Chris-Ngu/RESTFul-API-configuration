@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, make_response
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
+from functools import wraps
 import datetime
 import uuid
 import os
@@ -47,8 +48,11 @@ def token_required(f):
     return decorated
 
 @app.route('/user',methods=['GET'])
-@token_requred
+@token_required
 def get_all_users(current_user):
+
+    if not current_user.admin:
+        return jsonify({'message': 'Not admin, cannot continue'})
 
     users = User.query.all()
     output = []
@@ -64,8 +68,12 @@ def get_all_users(current_user):
     return jsonify({'users': output})
 
 @app.route('/user/<public_id>', methods=['GET'])
-@token_requred
+@token_required
 def get_one_user(current_user, public_id):
+
+    if not current_user.admin:
+        return jsonify({'message': 'Not admin, cannot continue'})
+
     user = User.query.filter_by(public_id=public_id).first()
     
     if not user:
@@ -81,6 +89,10 @@ def get_one_user(current_user, public_id):
 @app.route('/user', methods=['POST'])
 @token_required
 def create_user(current_user):
+
+    if not current_user.admin:
+        return jsonify({'message': 'Not admin, cannot continue'})
+
     data = request.get_json()
 
     hashed_password = generate_password_hash(data['password'], method='sha256')
@@ -91,8 +103,11 @@ def create_user(current_user):
     return jsonify({'message': 'New user created'})
 
 @app.route('/user/<public_id>', methods = ['PUT'])
-@token_requred
+@token_required
 def promote_user(current_user, public_id):
+
+    if not current_user.admin:
+        return jsonify({'message': 'Not admin, cannot continue'})
 
     user = User.query.filter_by(public_id=public_id).first()
     if not user:
@@ -103,8 +118,12 @@ def promote_user(current_user, public_id):
     return jsonify({'message': 'User has been promoted'})
 
 @app.route('/user/<public_id>', methods=['DELETE'])
-@token_requred
+@token_required
 def delete_user(current_user, public_id):
+
+    if not current_user.admin:
+        return jsonify({'message': 'Not admin, cannot continue'})
+
     user = User.query.filter_by(public_id=public_id).first()
     if not user:
         return jsonify({'Message': 'No user found'})
@@ -130,6 +149,15 @@ def login():
         return jsonify({'token' : token.decode('UTF-8')})
 
     return make_response('Error verifying', 401, {'WWW-Authenticate': 'Basic realm="Login required"'})
+
+@app.route('/todo', methods=['GET'])
+def get_all_todos():
+    return ''
+
+@app.route('/todo/<todo_id>', methods=['GET'])
+def get_one_todo(todo_id):
+    return ''
+
 
     
     
