@@ -5,3 +5,4 @@ Postman
 
 Flask w/ SQLAlchemy
 
+JWT
